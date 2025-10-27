@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'graphene_django',
     'crm',
+    'django_filters',
 ]
 
 MIDDLEWARE = [
@@ -67,6 +68,10 @@ TEMPLATES = [
         },
     },
 ]
+
+GRAPHENE = {
+    "SCHEMA": "alx_backend_graphql_crm.schema.schema"
+}
 
 WSGI_APPLICATION = 'alx_backend_graphql_crm.wsgi.application'
 
