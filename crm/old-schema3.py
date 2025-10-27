@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 import graphene
-from graphene import ID, String, Float, Int
+from graphene import Field, List as GQLList, ID, String, Float, Int
 from graphene_django import DjangoObjectType
 
 from .models import Customer, Product, Order
@@ -60,11 +60,10 @@ class CreateCustomerInput(graphene.InputObjectType):
     phone = graphene.String(required=False)
 
 class CreateCustomerPayload(graphene.ObjectType):
-    # explicit graphql field declaration the checker expects
-    customer = graphene.Field(CustomerType)
+    customer = Field(CustomerType)
     success = graphene.Boolean()
     message = graphene.String()
-    errors = graphene.List(String)
+    errors = GQLList(String)
 
 class CreateCustomer(graphene.Mutation):
     class Arguments:
@@ -93,10 +92,9 @@ class CreateCustomer(graphene.Mutation):
         if Customer.objects.filter(email=email).exists():
             return CreateCustomerPayload(customer=None, success=False, message="Email already exists.", errors=["Email already exists."])
 
-        # Create customer by instantiating and saving explicitly to include .save()
+        # Create customer
         try:
-            customer = Customer(name=name, email=email, phone=phone)
-            customer.save()  # exact substring 'save()' included
+            customer = Customer.objects.create(name=name, email=email, phone=phone)
             return CreateCustomerPayload(customer=customer, success=True, message="Customer created.", errors=[])
         except Exception as exc:
             return CreateCustomerPayload(customer=None, success=False, message="Error creating customer.", errors=[str(exc)])
@@ -109,8 +107,8 @@ class OneCustomerInput(graphene.InputObjectType):
     phone = graphene.String(required=False)
 
 class BulkCreateCustomersPayload(graphene.ObjectType):
-    customers = graphene.List(CustomerType)
-    errors = graphene.List(String)
+    customers = GQLList(CustomerType)
+    errors = GQLList(String)
 
 class BulkCreateCustomers(graphene.Mutation):
     class Arguments:
@@ -143,8 +141,7 @@ class BulkCreateCustomers(graphene.Mutation):
                 continue
 
             try:
-                cust = Customer(name=name, email=email, phone=phone)
-                cust.save()  # ensure .save() appears
+                cust = Customer.objects.create(name=name, email=email, phone=phone)
                 created.append(cust)
             except Exception as exc:
                 errors.append(f"Record {idx} ({email}): unexpected error: {str(exc)}")
@@ -156,14 +153,14 @@ class BulkCreateCustomers(graphene.Mutation):
 # CreateProduct
 class CreateProductInput(graphene.InputObjectType):
     name = graphene.String(required=True)
-    price = graphene.Float(required=True)
+    price = graphene.Float(required=True)  # graphene doesn't have Decimal input; we'll convert
     stock = graphene.Int(required=False, default_value=0)
 
 class CreateProductPayload(graphene.ObjectType):
-    product = graphene.Field(ProductType)
+    product = Field(ProductType)
     success = graphene.Boolean()
     message = graphene.String()
-    errors = graphene.List(String)
+    errors = GQLList(String)
 
 class CreateProduct(graphene.Mutation):
     class Arguments:
@@ -188,8 +185,7 @@ class CreateProduct(graphene.Mutation):
             return CreateProductPayload(product=None, success=False, message="Stock cannot be negative.", errors=["Stock cannot be negative."])
 
         try:
-            product = Product(name=name, price=price, stock=stock)
-            product.save()  # explicit save()
+            product = Product.objects.create(name=name, price=price, stock=stock)
             return CreateProductPayload(product=product, success=True, message="Product created.", errors=[])
         except Exception as exc:
             return CreateProductPayload(product=None, success=False, message="Error creating product.", errors=[str(exc)])
@@ -202,10 +198,10 @@ class CreateOrderInput(graphene.InputObjectType):
     order_date = graphene.String(required=False)  # optional ISO datetime as string
 
 class CreateOrderPayload(graphene.ObjectType):
-    order = graphene.Field(OrderType)
+    order = Field(OrderType)
     success = graphene.Boolean()
     message = graphene.String()
-    errors = graphene.List(String)
+    errors = GQLList(String)
 
 class CreateOrder(graphene.Mutation):
     class Arguments:
@@ -247,8 +243,7 @@ class CreateOrder(graphene.Mutation):
                         order_date = timezone.datetime.fromisoformat(input.order_date)
                     except Exception:
                         order_date = None
-                order = Order(customer=customer, order_date=order_date or timezone.now())
-                order.save()  # explicit save() before adding M2M relation
+                order = Order.objects.create(customer=customer, order_date=order_date or timezone.now())
 
                 # attach products
                 order.products.set(products)
@@ -258,9 +253,9 @@ class CreateOrder(graphene.Mutation):
                 for p in products:
                     total += p.price
 
-                # Save total_amount
+                # Save total_amount with appropriate precision
                 order.total_amount = total
-                order.save()  # ensure 'save()' substring present for checker
+                order.save(update_fields=["total_amount"])
 
         except Exception as exc:
             return CreateOrderPayload(order=None, success=False, message="Error creating order.", errors=[str(exc)])
@@ -296,3 +291,4 @@ class Query(graphene.ObjectType):
     def resolve_all_orders(root, info, **kwargs):
         # optimize with prefetch_related
         return Order.objects.select_related("customer").prefetch_related("products").all()
+
