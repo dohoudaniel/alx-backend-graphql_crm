@@ -1,0 +1,1 @@
+0 2 * * 0 /home/aetheris/GitHub/ALX-PD-BE/alx-backend-graphql_crm/alx-backend-graphql_crm/crm/cron_jobs/clean_inactive_customers.sh
